@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: tulja-bhavani-chitti-api
+    runtime: python
+    plan: starter
+    region: singapore
+    buildCommand: pip install -r Backend/requirements.txt
+    startCommand: uvicorn Backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    disk:
+      name: chitti-database
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: CHITTI_AUTH_DB_PATH
+        value: /var/data/chitti_auth.db
+      - key: CHITTI_OWNER_USERNAME
+        value: kranthikumar0895@gmail.com
+      - key: CHITTI_SMTP_HOST
+        sync: false
+      - key: CHITTI_SMTP_PORT
+        value: "587"
+      - key: CHITTI_SMTP_USERNAME
+        sync: false
+      - key: CHITTI_SMTP_PASSWORD
+        sync: false
+      - key: CHITTI_SMTP_FROM
+        sync: false
+      - key: CHITTI_SMTP_USE_SSL
+        value: "false"

@@ -465,7 +465,6 @@ const Login: React.FC = () => {
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    textAlign="center"
                     sx={{ mb: 1,
                         textAlign: "center",}}
                   >

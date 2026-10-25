@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   Box,
@@ -26,16 +26,22 @@ const Login: React.FC = () => {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [needsSetup, setNeedsSetup] = useState(false);
-  const [checkingSetup, setCheckingSetup] = useState(true);
+
+  // Sign in is the default page.
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
   const [authNotice, setAuthNotice] = useState(() => {
     const notice = sessionStorage.getItem("auth_message") ?? "";
     sessionStorage.removeItem("auth_message");
     return notice;
   });
+
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Forgot-password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetCodeSent, setResetCodeSent] = useState(false);
   const [resetUsername, setResetUsername] = useState("");
@@ -44,59 +50,75 @@ const Login: React.FC = () => {
   const [resetMessage, setResetMessage] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
+
   const navigate = useNavigate();
 
-  useEffect(() => {
-    api
-      .get<{ needs_initial_setup: boolean }>("/auth/status")
-      .then((response) => setNeedsSetup(response.data.needs_initial_setup))
-      .catch(() => setError("Could not connect to the server. Start the backend and try again."))
-      .then(() => setCheckingSetup(false));
-  }, []);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  // Sign in or create an account.
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
+
     setError("");
     setAuthNotice("");
+    setSuccessMessage("");
     setSubmitting(true);
 
     try {
-      const endpoint = needsSetup ? "register" : "login";
+      const endpoint = isCreatingAccount ? "register" : "login";
+
       const response = await api.post<AuthResponse>(
         `/auth/${endpoint}`,
         {
           username: username.trim(),
           password,
-          ...(needsSetup ? { email: email.trim() } : {}),
+          ...(isCreatingAccount ? { email: email.trim() } : {}),
         }
       );
+
       localStorage.setItem("access_token", response.data.access_token);
       localStorage.setItem("user", response.data.username);
+
       navigate("/", { replace: true });
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError, "Could not sign in. Please try again."));
+      setError(
+        getApiErrorMessage(
+          requestError,
+          isCreatingAccount
+            ? "Could not create your account. Please try again."
+            : "Could not sign in. Please check your username and password."
+        )
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRequestResetCode = async (event: React.FormEvent<HTMLFormElement>) => {
+  // Request a password-reset code.
+  const handleRequestResetCode = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
+
     setResetSubmitting(true);
     setResetError("");
     setResetMessage("");
+
     try {
       const response = await api.post<{ message: string }>(
         "/auth/password-reset/request",
-        { username: resetUsername.trim() }
+        {
+          username: resetUsername.trim(),
+        }
       );
+
       setResetCodeSent(true);
       setResetMessage(response.data.message);
     } catch (requestError) {
       setResetError(
         getApiErrorMessage(
           requestError,
-          `Cannot reach the API at ${API_BASE_URL}. Start the backend and check that the API URL is correct.`
+          `Cannot reach the API at ${API_BASE_URL}. Check that the API URL is correct.`
         )
       );
     } finally {
@@ -104,11 +126,16 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleConfirmReset = async (event: React.FormEvent<HTMLFormElement>) => {
+  // Confirm the password reset.
+  const handleConfirmReset = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
+
     setResetSubmitting(true);
     setResetError("");
     setResetMessage("");
+
     try {
       const response = await api.post<{ message: string }>(
         "/auth/password-reset/confirm",
@@ -118,6 +145,7 @@ const Login: React.FC = () => {
           new_password: resetPassword,
         }
       );
+
       setUsername(resetUsername.trim());
       setPassword("");
       setShowForgotPassword(false);
@@ -128,10 +156,29 @@ const Login: React.FC = () => {
       setSuccessMessage(response.data.message);
       setError("");
     } catch (requestError) {
-      setResetError(getApiErrorMessage(requestError, "Could not reset the password."));
+      setResetError(
+        getApiErrorMessage(
+          requestError,
+          "Could not reset the password."
+        )
+      );
     } finally {
       setResetSubmitting(false);
     }
+  };
+
+  // Return to the normal sign-in page.
+  const handleBackToLogin = () => {
+    setIsCreatingAccount(false);
+    setShowForgotPassword(false);
+    setResetCodeSent(false);
+    setResetCode("");
+    setResetPassword("");
+    setResetError("");
+    setResetMessage("");
+    setError("");
+    setAuthNotice("");
+    setSuccessMessage("");
   };
 
   return (
@@ -139,22 +186,48 @@ const Login: React.FC = () => {
       <Card className="login-card" elevation={0}>
         <CardContent className="login-card-content">
           <Box className="login-brand-mark">C</Box>
-          <Typography className="login-brand-name">Tulja Bhavani Chitti</Typography>
-          {checkingSetup ? (
-            <Box className="login-loading"><CircularProgress /></Box>
-          ) : showForgotPassword ? (
+
+          <Typography className="login-brand-name">
+            Tulja Bhavani Chitti
+          </Typography>
+
+          {showForgotPassword ? (
             <Box className="recovery-panel">
-              <Box className="login-heading-icon"><LockResetRoundedIcon /></Box>
-              <Typography variant="h5" className="login-title">Forgot your password?</Typography>
-              <Typography color="text.secondary" className="login-description">
+              <Box className="login-heading-icon">
+                <LockResetRoundedIcon />
+              </Box>
+
+              <Typography variant="h5" className="login-title">
+                Forgot your password?
+              </Typography>
+
+              <Typography
+                color="text.secondary"
+                className="login-description"
+              >
                 {resetCodeSent
                   ? "Enter the six-digit code sent to your account's recovery email."
                   : "Get a one-time code by email to reset your password."}
               </Typography>
-              {resetMessage && <Alert severity="info" sx={{ mb: 1.5 }}>{resetMessage}</Alert>}
-              {resetError && <Alert severity="error" sx={{ mb: 1.5 }}>{resetError}</Alert>}
+
+              {resetMessage && (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  {resetMessage}
+                </Alert>
+              )}
+
+              {resetError && (
+                <Alert severity="error" sx={{ mb: 1.5 }}>
+                  {resetError}
+                </Alert>
+              )}
+
               {!resetCodeSent ? (
-                <Box component="form" onSubmit={handleRequestResetCode} className="login-form">
+                <Box
+                  component="form"
+                  onSubmit={handleRequestResetCode}
+                  className="login-form"
+                >
                   <TextField
                     label="Username"
                     autoComplete="username"
@@ -162,14 +235,28 @@ const Login: React.FC = () => {
                     fullWidth
                     margin="normal"
                     value={resetUsername}
-                    onChange={(event) => setResetUsername(event.target.value)}
+                    onChange={(event) =>
+                      setResetUsername(event.target.value)
+                    }
                   />
-                  <Button type="submit" fullWidth variant="contained" disabled={resetSubmitting}>
-                    {resetSubmitting ? "Sending code..." : "Send reset code"}
+
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={resetSubmitting}
+                  >
+                    {resetSubmitting
+                      ? "Sending code..."
+                      : "Send reset code"}
                   </Button>
                 </Box>
               ) : (
-                <Box component="form" onSubmit={handleConfirmReset} className="login-form">
+                <Box
+                  component="form"
+                  onSubmit={handleConfirmReset}
+                  className="login-form"
+                >
                   <TextField
                     label="Six-digit code"
                     autoComplete="one-time-code"
@@ -178,10 +265,18 @@ const Login: React.FC = () => {
                     margin="normal"
                     value={resetCode}
                     onChange={(event) =>
-                      setResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                      setResetCode(
+                        event.target.value.replace(/\D/g, "").slice(0, 6)
+                      )
                     }
-                    slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 6 } }}
+                    slotProps={{
+                      htmlInput: {
+                        inputMode: "numeric",
+                        maxLength: 6,
+                      },
+                    }}
                   />
+
                   <TextField
                     label="New password"
                     type="password"
@@ -190,59 +285,91 @@ const Login: React.FC = () => {
                     fullWidth
                     margin="normal"
                     value={resetPassword}
-                    onChange={(event) => setResetPassword(event.target.value)}
-                    slotProps={{ htmlInput: { minLength: 10, maxLength: 128 } }}
+                    onChange={(event) =>
+                      setResetPassword(event.target.value)
+                    }
+                    slotProps={{
+                      htmlInput: {
+                        minLength: 10,
+                        maxLength: 128,
+                      },
+                    }}
                   />
+
                   <Button
                     type="submit"
                     fullWidth
                     variant="contained"
-                    disabled={resetSubmitting || resetCode.length !== 6 || resetPassword.length < 10}
+                    disabled={
+                      resetSubmitting ||
+                      resetCode.length !== 6 ||
+                      resetPassword.length < 10
+                    }
                   >
-                    {resetSubmitting ? "Resetting password..." : "Reset password"}
+                    {resetSubmitting
+                      ? "Resetting password..."
+                      : "Reset password"}
                   </Button>
                 </Box>
               )}
+
               <Button
                 fullWidth
                 variant="text"
                 startIcon={<ArrowBackRoundedIcon />}
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setResetCodeSent(false);
-                  setResetCode("");
-                  setResetPassword("");
-                  setResetError("");
-                  setResetMessage("");
-                }}
+                onClick={handleBackToLogin}
                 sx={{ mt: 1 }}
               >
                 Return to sign in
               </Button>
             </Box>
           ) : (
-            <Box component="form" onSubmit={handleSubmit} className="login-form">
-              <Box className="login-heading-icon"><LockOpenRoundedIcon /></Box>
+            <Box
+              component="form"
+              onSubmit={handleSubmit}
+              className="login-form"
+            >
+              <Box className="login-heading-icon">
+                <LockOpenRoundedIcon />
+              </Box>
+
               <Typography variant="h5" className="login-title">
-                {needsSetup ? "Create your account" : "Welcome back"}
+                {isCreatingAccount
+                  ? "Create your account"
+                  : "Welcome back"}
               </Typography>
-              <Typography color="text.secondary" className="login-description">
-                {needsSetup
+
+              <Typography
+                color="text.secondary"
+                className="login-description"
+              >
+                {isCreatingAccount
                   ? "Set up your account to get started."
                   : "Sign in to manage your chitti groups."}
               </Typography>
-              {needsSetup && (
+
+              {authNotice && (
                 <Alert severity="info" sx={{ mb: 1.5 }}>
-                  Choose a username with at least 3 characters, enter a recovery email, and use a password with at least 10 characters.
+                  {authNotice}
                 </Alert>
               )}
-              {authNotice && <Alert severity="info" sx={{ mb: 1.5 }}>{authNotice}</Alert>}
-              {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
+
+              {error && (
+                <Alert severity="error" sx={{ mb: 1.5 }}>
+                  {error}
+                </Alert>
+              )}
+
               {successMessage && (
-                <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setSuccessMessage("")}>
+                <Alert
+                  severity="success"
+                  sx={{ mb: 1.5 }}
+                  onClose={() => setSuccessMessage("")}
+                >
                   {successMessage}
                 </Alert>
               )}
+
               <TextField
                 label="Username"
                 autoComplete="username"
@@ -250,9 +377,17 @@ const Login: React.FC = () => {
                 fullWidth
                 margin="normal"
                 value={username}
-                onChange={(event) => setUsername(event.target.value)}
+                onChange={(event) =>
+                  setUsername(event.target.value)
+                }
+                slotProps={{
+                  htmlInput: {
+                    minLength: 3,
+                  },
+                }}
               />
-              {needsSetup && (
+
+              {isCreatingAccount && (
                 <TextField
                   label="Recovery email"
                   type="email"
@@ -261,27 +396,43 @@ const Login: React.FC = () => {
                   fullWidth
                   margin="normal"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
                 />
               )}
+
               <TextField
                 label="Password"
                 type="password"
-                autoComplete={needsSetup ? "new-password" : "current-password"}
+                autoComplete={
+                  isCreatingAccount
+                    ? "new-password"
+                    : "current-password"
+                }
                 required
-                slotProps={{ htmlInput: { minLength: 10, maxLength: 128 } }}
                 fullWidth
                 margin="normal"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) =>
+                  setPassword(event.target.value)
+                }
+                slotProps={{
+                  htmlInput: {
+                    minLength: isCreatingAccount ? 10 : undefined,
+                    maxLength: 128,
+                  },
+                }}
               />
-              {!needsSetup && (
+
+              {!isCreatingAccount && (
                 <Box className="forgot-password-row">
                   <Button
                     type="button"
                     variant="text"
                     onClick={() => {
                       setError("");
+                      setSuccessMessage("");
                       setShowForgotPassword(true);
                     }}
                   >
@@ -289,6 +440,7 @@ const Login: React.FC = () => {
                   </Button>
                 </Box>
               )}
+
               <Button
                 type="submit"
                 variant="contained"
@@ -297,10 +449,62 @@ const Login: React.FC = () => {
                 className="login-submit"
                 disabled={submitting}
               >
-                {submitting ? "Please wait..." : needsSetup ? "Create account" : "Sign in"}
+                {submitting ? (
+                  <CircularProgress size={22} color="inherit" />
+                ) : isCreatingAccount ? (
+                  "Create account"
+                ) : (
+                  "Sign in"
+                )}
               </Button>
-              <Divider sx={{ mt: 3 }} />
-              <Typography variant="caption" color="text.secondary" className="login-footer">
+
+              <Divider sx={{ mt: 3, mb: 2 }} />
+
+              {!isCreatingAccount ? (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    textAlign="center"
+                    sx={{ mb: 1 }}
+                  >
+                    Don't have an account?
+                  </Typography>
+
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    fullWidth
+                    onClick={() => {
+                      setError("");
+                      setAuthNotice("");
+                      setSuccessMessage("");
+                      setEmail("");
+                      setPassword("");
+                      setIsCreatingAccount(true);
+                    }}
+                  >
+                    Create your account
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="text"
+                  fullWidth
+                  startIcon={<ArrowBackRoundedIcon />}
+                  onClick={handleBackToLogin}
+                >
+                  Back to sign in
+                </Button>
+              )}
+
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                className="login-footer"
+                sx={{ display: "block", mt: 3, textAlign: "center" }}
+              >
                 Securely manage your chitti, members, and monthly collections.
               </Typography>
             </Box>

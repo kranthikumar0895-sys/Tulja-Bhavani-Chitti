@@ -466,7 +466,8 @@ const Login: React.FC = () => {
                     variant="body2"
                     color="text.secondary"
                     textAlign="center"
-                    sx={{ mb: 1 }}
+                    sx={{ mb: 1,
+                        textAlign: "center",}}
                   >
                     Don't have an account?
                   </Typography>

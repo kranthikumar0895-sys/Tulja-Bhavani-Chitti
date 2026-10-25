@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { HashRouter as Router, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Box } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Header from "./Header";

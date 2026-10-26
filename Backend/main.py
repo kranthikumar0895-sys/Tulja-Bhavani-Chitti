@@ -692,10 +692,14 @@ def login(data: Credentials):
 
 
 @app.post("/api/auth/password-reset/request")
+
 def request_password_reset(data: PasswordResetRequestCode):
     response = {
         "status": "success",
-        "message": "If an account matches, a reset code will be sent to its recovery email.",
+        "message": (
+            "If an account matches, a reset code will be sent "
+            "to its recovery email."
+        ),
     }
     normalized_username = normalize_username(data.username)
     with get_auth_db() as connection:
@@ -708,10 +712,14 @@ def request_password_reset(data: PasswordResetRequestCode):
             (normalized_username,),
         ).fetchone()
         # Do not reveal whether the username exists.
-        if user is None or not user["email"]:
+        if user is None:
             logger.info(
-                "Password reset requested for username '%s', but no email was found.",
-                normalized_username,
+                "Password reset skipped: account not found."
+            )
+            return response
+        if not user["email"]:
+            logger.info(
+                "Password reset skipped: no recovery email is configured."
             )
             return response
         now = int(time.time())
@@ -726,14 +734,14 @@ def request_password_reset(data: PasswordResetRequestCode):
         # Prevent requesting another code too quickly.
         if (
             previous_request is not None
-            and now - previous_request["created_at"] < RESET_CODE_RESEND_SECONDS
+            and now - previous_request["created_at"]
+            < RESET_CODE_RESEND_SECONDS
         ):
             logger.info(
-                "Password reset request blocked by resend cooldown for username '%s'.",
-                normalized_username,
+                "Password reset skipped: resend cooldown is active."
             )
             return response
-        # Generate a 6-digit code.
+        # Generate a six-digit reset code.
         code = f"{secrets.randbelow(1_000_000):06d}"
         salt = secrets.token_bytes(16)
         code_hash = hashlib.pbkdf2_hmac(
@@ -742,7 +750,7 @@ def request_password_reset(data: PasswordResetRequestCode):
             salt,
             RESET_CODE_ITERATIONS,
         )
-
+        # Save the hashed code in the database.
         connection.execute(
             """
             INSERT INTO password_reset_codes
@@ -755,7 +763,6 @@ def request_password_reset(data: PasswordResetRequestCode):
                     created_at
                 )
             VALUES (?, ?, ?, ?, 0, ?)
-
             ON CONFLICT(user_id) DO UPDATE SET
                 code_salt = excluded.code_salt,
                 code_hash = excluded.code_hash,
@@ -771,32 +778,34 @@ def request_password_reset(data: PasswordResetRequestCode):
                 now,
             ),
         )
-        # IMPORTANT:
-        # Send the email BEFORE leaving the function.
+        # Save the values needed after closing the database connection.
+        user_id = user["id"]
         recipient_email = user["email"]
-
-    # Log which email address is being used.
-    # Do NOT log the six-digit code.
-    logger.info("Password reset email sending attempt started")
-
+    # Send the email after the database connection is closed.
+    # Never log the reset code or SMTP password.
+    logger.info("Password reset email sending attempt started.")
     try:
         send_password_reset_email(
-        recipient_email,
-        code,
+            recipient_email,
+            code,
         )
-
-        logger.info("Password reset email function completed successfully")
-
+        logger.info(
+            "Password reset email function completed successfully."
+        )
     except HTTPException:
-        logger.exception("Password reset email sending failed")
-
+        logger.exception(
+            "Password reset email sending failed."
+        )
+        # Remove the reset code because the email was not sent successfully.
         with get_auth_db() as connection:
             connection.execute(
-                "DELETE FROM password_reset_codes WHERE user_id = ?",
-                (user["id"],),
+                """
+                DELETE FROM password_reset_codes
+                WHERE user_id = ?
+                """,
+                (user_id,),
             )
-
-        raise    
+        raise
     return response
 
 

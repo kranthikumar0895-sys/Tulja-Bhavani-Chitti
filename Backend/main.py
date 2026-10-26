@@ -692,10 +692,9 @@ def login(data: Credentials):
 
 
 @app.post("/api/auth/password-reset/request")
-
 def request_password_reset(data: PasswordResetRequestCode):
     print("PASSWORD RESET FUNCTION ENTERED", flush=True)
-    logger.info("DEBUG: password reset endpoint entered")
+
     response = {
         "status": "success",
         "message": (
@@ -703,7 +702,14 @@ def request_password_reset(data: PasswordResetRequestCode):
             "to its recovery email."
         ),
     }
+
     normalized_username = normalize_username(data.username)
+
+    print(
+        f"DEBUG: password reset requested for username: {normalized_username}",
+        flush=True,
+    )
+
     with get_auth_db() as connection:
         user = connection.execute(
             """
@@ -713,19 +719,37 @@ def request_password_reset(data: PasswordResetRequestCode):
             """,
             (normalized_username,),
         ).fetchone()
-        # Do not reveal whether the username exists.
+
+        # Check whether the username exists.
         if user is None:
-            logger.info(
-                "Password reset skipped: account not found."
+            print(
+                "DEBUG: USER NOT FOUND IN DATABASE",
+                flush=True,
             )
             return response
-        if not user["email"]:
-            logger.info(
-                "Password reset skipped: no recovery email is configured."
+
+        print(
+            "DEBUG: USER FOUND IN DATABASE",
+            flush=True,
+        )
+
+        # Check whether a recovery email exists.
+        recipient_email = user["email"]
+
+        if not recipient_email:
+            print(
+                "DEBUG: USER HAS NO RECOVERY EMAIL",
+                flush=True,
             )
             return response
-        logger.warning("DEBUG: Account found and recovery email exists")
+
+        print(
+            "DEBUG: RECOVERY EMAIL EXISTS",
+            flush=True,
+        )
+
         now = int(time.time())
+
         previous_request = connection.execute(
             """
             SELECT created_at
@@ -734,26 +758,34 @@ def request_password_reset(data: PasswordResetRequestCode):
             """,
             (user["id"],),
         ).fetchone()
-        # Prevent requesting another code too quickly.
+
         if (
             previous_request is not None
             and now - previous_request["created_at"]
             < RESET_CODE_RESEND_SECONDS
         ):
-            logger.info(
-                "Password reset skipped: resend cooldown is active."
+            print(
+                "DEBUG: RESET CODE RESEND COOLDOWN ACTIVE",
+                flush=True,
             )
             return response
-        # Generate a six-digit reset code.
+
+        print(
+            "DEBUG: GENERATING RESET CODE",
+            flush=True,
+        )
+
         code = f"{secrets.randbelow(1_000_000):06d}"
+
         salt = secrets.token_bytes(16)
+
         code_hash = hashlib.pbkdf2_hmac(
             "sha256",
             code.encode("ascii"),
             salt,
             RESET_CODE_ITERATIONS,
         )
-        # Save the hashed code in the database.
+
         connection.execute(
             """
             INSERT INTO password_reset_codes
@@ -766,6 +798,7 @@ def request_password_reset(data: PasswordResetRequestCode):
                     created_at
                 )
             VALUES (?, ?, ?, ?, 0, ?)
+
             ON CONFLICT(user_id) DO UPDATE SET
                 code_salt = excluded.code_salt,
                 code_hash = excluded.code_hash,
@@ -781,25 +814,40 @@ def request_password_reset(data: PasswordResetRequestCode):
                 now,
             ),
         )
-        # Save the values needed after closing the database connection.
+
         user_id = user["id"]
-        recipient_email = user["email"]
-    # Send the email after the database connection is closed.
-    # Never log the reset code or SMTP password.
-    logger.info("Password reset email sending attempt started.")
+
+        print(
+            "DEBUG: RESET CODE SAVED TO DATABASE",
+            flush=True,
+        )
+
+    # ---------------------------------------------------------
+    # Send the email
+    # ---------------------------------------------------------
+
+    print(
+        "DEBUG: ABOUT TO SEND PASSWORD RESET EMAIL",
+        flush=True,
+    )
+
     try:
         send_password_reset_email(
             recipient_email,
             code,
         )
-        logger.info(
-            "Password reset email function completed successfully."
+
+        print(
+            "DEBUG: PASSWORD RESET EMAIL FUNCTION COMPLETED",
+            flush=True,
         )
-    except HTTPException:
-        logger.exception(
-            "Password reset email sending failed."
+
+    except HTTPException as error:
+        print(
+            f"DEBUG: PASSWORD RESET EMAIL FAILED: {error.detail}",
+            flush=True,
         )
-        # Remove the reset code because the email was not sent successfully.
+
         with get_auth_db() as connection:
             connection.execute(
                 """
@@ -808,7 +856,14 @@ def request_password_reset(data: PasswordResetRequestCode):
                 """,
                 (user_id,),
             )
+
         raise
+
+    print(
+        "DEBUG: PASSWORD RESET REQUEST COMPLETED",
+        flush=True,
+    )
+
     return response
 
 

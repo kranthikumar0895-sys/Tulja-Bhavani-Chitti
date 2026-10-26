@@ -76,7 +76,7 @@ const Header: React.FC = () => {
     } finally {
       localStorage.removeItem("access_token");
       localStorage.removeItem("user");
-      window.location.href = "/login";
+      window.location.hash = "/login";
     }
   };
 

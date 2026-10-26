@@ -694,6 +694,7 @@ def login(data: Credentials):
 @app.post("/api/auth/password-reset/request")
 
 def request_password_reset(data: PasswordResetRequestCode):
+    print("PASSWORD RESET FUNCTION ENTERED", flush=True)
     logger.info("DEBUG: password reset endpoint entered")
     response = {
         "status": "success",

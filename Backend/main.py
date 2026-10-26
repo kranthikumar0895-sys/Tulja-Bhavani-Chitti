@@ -777,34 +777,26 @@ def request_password_reset(data: PasswordResetRequestCode):
 
     # Log which email address is being used.
     # Do NOT log the six-digit code.
-    logger.info(
-        "Sending password reset email to %s",
-        recipient_email,
-    )
+    logger.info("Password reset email sending attempt started")
+
     try:
         send_password_reset_email(
-            recipient_email,
-            code,
+        recipient_email,
+        code,
         )
-        logger.info(
-            "Password reset email submitted successfully to %s",
-            recipient_email,
-        )
+
+        logger.info("Password reset email function completed successfully")
+
     except HTTPException:
-        logger.exception(
-            "Password reset email could not be sent to %s",
-            recipient_email,
-        )
-        # Remove the reset code because the email was not sent.
+        logger.exception("Password reset email sending failed")
+
         with get_auth_db() as connection:
             connection.execute(
-                """
-                DELETE FROM password_reset_codes
-                WHERE user_id = ?
-                """,
+                "DELETE FROM password_reset_codes WHERE user_id = ?",
                 (user["id"],),
             )
-        raise
+
+        raise    
     return response
 
 

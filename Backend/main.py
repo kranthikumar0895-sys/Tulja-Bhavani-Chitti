@@ -692,7 +692,8 @@ def login(data: Credentials):
 
 
 @app.post("/api/auth/password-reset/request")
-def request_password_reset(data: PasswordResetRequestCode):
+def request_password_reset(data: RecoveryEmailRequest):
+    recovery_email = normalize_email(data.email)
     print("PASSWORD RESET FUNCTION ENTERED", flush=True)
 
     response = {
@@ -709,7 +710,7 @@ def request_password_reset(data: PasswordResetRequestCode):
         f"DEBUG: password reset requested for username: {normalized_username}",
         flush=True,
     )
-
+    recovery_email = normalize_email(data.email)
     with get_auth_db() as connection:
         user = connection.execute(
             """
@@ -717,7 +718,7 @@ def request_password_reset(data: PasswordResetRequestCode):
             FROM users
             WHERE email = ? COLLATE NOCASE
             """,
-            (recovery_emaile,),
+            (recovery_email,),
         ).fetchone()
 
         # Check whether the username exists.

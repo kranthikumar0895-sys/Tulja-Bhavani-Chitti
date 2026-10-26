@@ -715,7 +715,7 @@ def request_password_reset(data: RecoveryEmailRequest):
         ),
     }
 
-    normalized_username = normalize_username(data.username)
+    recovery_email = normalize_email(data.email)
 
     print(
         f"DEBUG: password reset requested for username: {normalized_username}",

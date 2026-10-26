@@ -315,59 +315,273 @@ def normalize_email(email: str) -> str:
 
 
 def send_password_reset_email(recipient: str, code: str) -> None:
+    """
+    Send a password reset code to the user's recovery email.
+
+    SMTP configuration comes from Render environment variables:
+        CHITTI_SMTP_HOST
+        CHITTI_SMTP_PORT
+        CHITTI_SMTP_FROM
+        CHITTI_SMTP_USERNAME
+        CHITTI_SMTP_PASSWORD
+        CHITTI_SMTP_USE_SSL
+    """
+
     host = os.environ.get("CHITTI_SMTP_HOST", "").strip()
     sender = os.environ.get("CHITTI_SMTP_FROM", "").strip()
-    if not host or not sender:
+
+    # ---------------------------------------------------------
+    # 1. Check basic SMTP configuration
+    # ---------------------------------------------------------
+
+    if not host:
+        logger.error("CHITTI_SMTP_HOST is missing")
+
         raise HTTPException(
             status_code=503,
-            detail="Password reset email is not configured. Set the backend SMTP settings and try again.",
+            detail="SMTP host is not configured.",
         )
 
-    try:
-        port = int(os.environ.get("CHITTI_SMTP_PORT", "587"))
-    except ValueError as error:
-        raise HTTPException(status_code=503, detail="The configured SMTP port is invalid.") from error
+    if not sender:
+        logger.error("CHITTI_SMTP_FROM is missing")
 
-    username = os.environ.get("CHITTI_SMTP_USERNAME", "").strip()
-    password = os.environ.get("CHITTI_SMTP_PASSWORD", "")
-    use_ssl = os.environ.get("CHITTI_SMTP_USE_SSL", "false").strip().casefold() == "true"
+        raise HTTPException(
+            status_code=503,
+            detail="SMTP sender email is not configured.",
+        )
+
+    # ---------------------------------------------------------
+    # 2. Read SMTP port
+    # ---------------------------------------------------------
+    try:
+        port = int(
+            os.environ.get(
+                "CHITTI_SMTP_PORT",
+                "587",
+            )
+        )
+    except ValueError as error:
+        logger.exception("Invalid SMTP port")
+        raise HTTPException(
+            status_code=503,
+            detail="The configured SMTP port is invalid.",
+        ) from error
+
+    # ---------------------------------------------------------
+    # 3. Read SMTP username/password
+    # ---------------------------------------------------------
+    username = os.environ.get(
+        "CHITTI_SMTP_USERNAME",
+        "",
+    ).strip()
+    password = os.environ.get(
+        "CHITTI_SMTP_PASSWORD",
+        "",
+    )
+    use_ssl = (
+        os.environ.get(
+            "CHITTI_SMTP_USE_SSL",
+            "false",
+        )
+        .strip()
+        .casefold()
+        == "true"
+    )
+    # Username and password must either both exist or both be empty.
     if bool(username) != bool(password):
+        logger.error(
+            "SMTP username/password configuration is incomplete"
+        )
         raise HTTPException(
             status_code=503,
             detail="Both SMTP username and password must be configured together.",
         )
+    # ---------------------------------------------------------
+    # 4. Create email
+    # ---------------------------------------------------------
 
     message = EmailMessage()
     message["Subject"] = "Your Chitti password reset code"
     message["From"] = sender
     message["To"] = recipient
     message.set_content(
-        f"Your password reset code is {code}.\n\n"
-        "It expires in 10 minutes and can be used once. "
-        "If you did not request a password reset, ignore this email."
+        f"""
+Hello,
+Your Tulja Bhavani Chitti password reset code is:
+{code}
+This code expires in 10 minutes and can only be used once.
+If you did not request a password reset, please ignore this email.
+Regards,
+Tulja Bhavani Chitti
+""".strip()
     )
 
+    # ---------------------------------------------------------
+    # 5. Connect to SMTP server and send email
+    # ---------------------------------------------------------
+
     try:
+
+        logger.info(
+            "Starting password reset email delivery"
+        )
+
+        logger.info(
+            "SMTP host: %s",
+            host,
+        )
+
+        logger.info(
+            "SMTP port: %s",
+            port,
+        )
+
+        logger.info(
+            "SMTP SSL: %s",
+            use_ssl,
+        )
+
+        logger.info(
+            "SMTP sender: %s",
+            sender,
+        )
+        logger.info(
+            "Password reset recipient: %s",
+            recipient,
+        )
+        # IMPORTANT:
+        # Do NOT log the actual SMTP password.
+        logger.info(
+            "SMTP username configured: %s",
+            bool(username),
+        )
+        logger.info(
+            "SMTP password configured: %s",
+            bool(password),
+        )
+        # -----------------------------------------------------
+        # SSL connection
+        # -----------------------------------------------------
         if use_ssl:
+            logger.info(
+                "Connecting using SMTP_SSL..."
+            )
             with smtplib.SMTP_SSL(
-                host, port, timeout=20, context=ssl.create_default_context()
+                host,
+                port,
+                timeout=20,
+                context=ssl.create_default_context(),
             ) as server:
+                logger.info(
+                    "SMTP_SSL connection established"
+                )
                 if username:
-                    server.login(username, password)
+                    logger.info(
+                        "Authenticating with SMTP server..."
+                    )
+                    server.login(
+                        username,
+                        password,
+                    )
+                    logger.info(
+                        "SMTP authentication successful"
+                    )
+                logger.info(
+                    "Sending password reset email..."
+                )
                 server.send_message(message)
+                logger.info(
+                    "Password reset email sent successfully to %s",
+                    recipient,
+                )
+        # -----------------------------------------------------
+        # STARTTLS connection
+        # -----------------------------------------------------
         else:
-            with smtplib.SMTP(host, port, timeout=20) as server:
+            logger.info(
+                "Connecting using SMTP + STARTTLS..."
+            )
+            with smtplib.SMTP(
+                host,
+                port,
+                timeout=20,
+            ) as server:
+                logger.info(
+                    "SMTP connection established"
+                )
+
                 server.ehlo()
-                server.starttls(context=ssl.create_default_context())
+                logger.info(
+                    "Starting TLS..."
+                )
+                server.starttls(
+                    context=ssl.create_default_context()
+                )
                 server.ehlo()
+                logger.info(
+                    "TLS connection established"
+                )
                 if username:
-                    server.login(username, password)
+                    logger.info(
+                        "Authenticating with SMTP server..."
+                    )
+                    server.login(
+                        username,
+                        password,
+                    )
+                    logger.info(
+                        "SMTP authentication successful"
+                    )
+                logger.info(
+                    "Sending password reset email..."
+                )
                 server.send_message(message)
-    except (OSError, smtplib.SMTPException):
-        logger.exception("Could not send password reset email")
+                logger.info(
+                    "Password reset email sent successfully to %s",
+                    recipient,
+                )
+    # ---------------------------------------------------------
+    # 6. Handle SMTP errors
+    # ---------------------------------------------------------
+    except smtplib.SMTPAuthenticationError:
+        logger.exception(
+            "SMTP authentication failed. Check CHITTI_SMTP_USERNAME and CHITTI_SMTP_PASSWORD."
+        )
         raise HTTPException(
             status_code=503,
-            detail="Could not send the password reset email. Check the backend SMTP settings and try again.",
+            detail="Email server authentication failed. Check the SMTP username and App Password.",
+        )
+    except smtplib.SMTPConnectError:
+        logger.exception(
+            "Could not connect to SMTP server."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not connect to the email server.",
+        )
+    except smtplib.SMTPServerDisconnected:
+        logger.exception(
+            "SMTP server disconnected the connection."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="The email server disconnected the connection.",
+        )
+    except smtplib.SMTPException:
+        logger.exception(
+            "SMTP error while sending password reset email."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not send the password reset email.",
+        )
+    except OSError:
+        logger.exception(
+            "Network error while connecting to SMTP server."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not connect to the email server.",
         )
 
 
@@ -483,35 +697,65 @@ def request_password_reset(data: PasswordResetRequestCode):
         "status": "success",
         "message": "If an account matches, a reset code will be sent to its recovery email.",
     }
+    normalized_username = normalize_username(data.username)
     with get_auth_db() as connection:
         user = connection.execute(
-            "SELECT id, email FROM users WHERE username = ? COLLATE NOCASE",
-            (normalize_username(data.username),),
+            """
+            SELECT id, email
+            FROM users
+            WHERE username = ? COLLATE NOCASE
+            """,
+            (normalized_username,),
         ).fetchone()
+        # Do not reveal whether the username exists.
         if user is None or not user["email"]:
+            logger.info(
+                "Password reset requested for username '%s', but no email was found.",
+                normalized_username,
+            )
             return response
-
         now = int(time.time())
         previous_request = connection.execute(
-            "SELECT created_at FROM password_reset_codes WHERE user_id = ?",
+            """
+            SELECT created_at
+            FROM password_reset_codes
+            WHERE user_id = ?
+            """,
             (user["id"],),
         ).fetchone()
+        # Prevent requesting another code too quickly.
         if (
             previous_request is not None
             and now - previous_request["created_at"] < RESET_CODE_RESEND_SECONDS
         ):
+            logger.info(
+                "Password reset request blocked by resend cooldown for username '%s'.",
+                normalized_username,
+            )
             return response
-
+        # Generate a 6-digit code.
         code = f"{secrets.randbelow(1_000_000):06d}"
         salt = secrets.token_bytes(16)
         code_hash = hashlib.pbkdf2_hmac(
-            "sha256", code.encode("ascii"), salt, RESET_CODE_ITERATIONS
+            "sha256",
+            code.encode("ascii"),
+            salt,
+            RESET_CODE_ITERATIONS,
         )
+
         connection.execute(
             """
             INSERT INTO password_reset_codes
-                (user_id, code_salt, code_hash, expires_at, attempts, created_at)
+                (
+                    user_id,
+                    code_salt,
+                    code_hash,
+                    expires_at,
+                    attempts,
+                    created_at
+                )
             VALUES (?, ?, ?, ?, 0, ?)
+
             ON CONFLICT(user_id) DO UPDATE SET
                 code_salt = excluded.code_salt,
                 code_hash = excluded.code_hash,
@@ -519,15 +763,46 @@ def request_password_reset(data: PasswordResetRequestCode):
                 attempts = 0,
                 created_at = excluded.created_at
             """,
-            (user["id"], salt, code_hash, now + RESET_CODE_TTL_SECONDS, now),
+            (
+                user["id"],
+                salt,
+                code_hash,
+                now + RESET_CODE_TTL_SECONDS,
+                now,
+            ),
         )
+        # IMPORTANT:
+        # Send the email BEFORE leaving the function.
+        recipient_email = user["email"]
 
+    # Log which email address is being used.
+    # Do NOT log the six-digit code.
+    logger.info(
+        "Sending password reset email to %s",
+        recipient_email,
+    )
     try:
-        send_password_reset_email(user["email"], code)
+        send_password_reset_email(
+            recipient_email,
+            code,
+        )
+        logger.info(
+            "Password reset email submitted successfully to %s",
+            recipient_email,
+        )
     except HTTPException:
+        logger.exception(
+            "Password reset email could not be sent to %s",
+            recipient_email,
+        )
+        # Remove the reset code because the email was not sent.
         with get_auth_db() as connection:
             connection.execute(
-                "DELETE FROM password_reset_codes WHERE user_id = ?", (user["id"],)
+                """
+                DELETE FROM password_reset_codes
+                WHERE user_id = ?
+                """,
+                (user["id"],),
             )
         raise
     return response

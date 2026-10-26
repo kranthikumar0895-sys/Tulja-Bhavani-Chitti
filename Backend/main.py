@@ -724,6 +724,7 @@ def request_password_reset(data: PasswordResetRequestCode):
                 "Password reset skipped: no recovery email is configured."
             )
             return response
+        logger.warning("DEBUG: Account found and recovery email exists")
         now = int(time.time())
         previous_request = connection.execute(
             """

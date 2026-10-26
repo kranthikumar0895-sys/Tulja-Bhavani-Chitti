@@ -309,8 +309,18 @@ def create_user(
 
 def normalize_email(email: str) -> str:
     normalized_email = email.strip().casefold()
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized_email):
-        raise HTTPException(status_code=422, detail="Enter a valid recovery email address")
+
+    if not re.fullmatch(
+        r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+        r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+",
+        normalized_email,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Enter a valid recovery email address",
+        )
+
     return normalized_email
 
 
@@ -693,6 +703,7 @@ def login(data: Credentials):
 
 @app.post("/api/auth/password-reset/request")
 def request_password_reset(data: RecoveryEmailRequest):
+    print("Recovery email field received:", repr(data.email), flush=True)
     recovery_email = normalize_email(data.email)
     print("PASSWORD RESET FUNCTION ENTERED", flush=True)
 

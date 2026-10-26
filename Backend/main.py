@@ -717,7 +717,7 @@ def request_password_reset(data: PasswordResetRequestCode):
             FROM users
             WHERE email = ? COLLATE NOCASE
             """,
-            (normalized_username,),
+            (recovery_emaile,),
         ).fetchone()
 
         # Check whether the username exists.

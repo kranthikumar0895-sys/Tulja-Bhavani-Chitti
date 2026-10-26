@@ -715,7 +715,7 @@ def request_password_reset(data: PasswordResetRequestCode):
             """
             SELECT id, email
             FROM users
-            WHERE username = ? COLLATE NOCASE
+            WHERE email = ? COLLATE NOCASE
             """,
             (normalized_username,),
         ).fetchone()

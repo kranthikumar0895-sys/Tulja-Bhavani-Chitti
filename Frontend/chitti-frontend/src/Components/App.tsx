@@ -20,7 +20,6 @@ import Login from "./login";
 
 // If these components already exist, use the correct file names.
 // Otherwise, create them before using these imports.
-import Register from "./Register";
 import ForgotPassword from "./ForgotPassword";
 import ResetPassword from "./ResetPassword";
 
@@ -54,7 +53,6 @@ const App: React.FC = () => {
       <Routes>
         {/* Public pages */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         <Route
           path="/forgot-password"
           element={<ForgotPassword />}
